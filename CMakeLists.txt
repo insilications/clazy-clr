@@ -44,7 +44,7 @@ add_definitions(-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS)
 add_definitions(-D_GNU_SOURCE -DHAVE_CLANG_CONFIG_H)
 
 option(CLAZY_AST_MATCHERS_CRASH_WORKAROUND "Disable AST Matchers if being built with clang. See bug #392223" ON)
-option(LINK_CLAZY_TO_LLVM "Links the clazy plugin to LLVM. Switch to OFF if your clang binary has all symbols already. Might need to be OFF if your LLVM is static." ON)
+option(LINK_CLAZY_TO_LLVM "Links the clazy plugin to LLVM. Switch to OFF if your clang binary has all symbols already. Might need to be OFF if your LLVM is static." OFF)
 option(APPIMAGE_HACK "Links the clazy plugin to the clang tooling libs only. For some reason this is needed when building on our old CentOS 6.8 to create the AppImage." OFF)
 option(CLAZY_MAN_PAGE "Builds the man page." ON)
 
@@ -120,6 +120,9 @@ macro(link_to_llvm name is_standalone)
       endif()
 
       target_link_libraries(${name} ${clang_lib})
+      target_link_libraries(${name} clangTooling)
+      target_link_libraries(${name} clangToolingCore)
+      target_link_libraries(${name} ${clang_tooling_refactoring_lib})
     endforeach()
     target_link_libraries(${name} clangTooling)
     target_link_libraries(${name} clangToolingCore)
@@ -156,7 +159,7 @@ endmacro()
 macro(add_clang_plugin name)
   set(srcs ${ARGN})
 
-  add_library(${name} SHARED ${srcs})
+  add_library(${name} STATIC ${srcs})
 
   if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
       # 30% speedup
