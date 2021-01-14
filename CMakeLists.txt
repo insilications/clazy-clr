@@ -61,7 +61,7 @@ if(MSVC)
   # disable trigger-happy warnings from Clang/LLVM headers
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4267 /wd4244 /wd4291 /wd4800 /wd4141 /wd4146 /wd4251")
 elseif(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -fno-common -Woverloaded-virtual -Wcast-qual -fno-strict-aliasing -pedantic -Wno-long-long -Wall -W -Wno-unused-parameter -Wwrite-strings -fno-exceptions -fno-rtti")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -fno-common -Woverloaded-virtual -Wcast-qual -fno-strict-aliasing -pedantic -Wno-long-long -Wall -W -Wno-unused-parameter -Wwrite-strings -fno-exceptions -fno-rtti")
 endif()
 
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-flat_namespace -Wl,-undefined -Wl,suppress")
@@ -124,9 +124,9 @@ macro(link_to_llvm name is_standalone)
       target_link_libraries(${name} clangToolingCore)
       target_link_libraries(${name} ${clang_tooling_refactoring_lib})
     endforeach()
-    target_link_libraries(${name} clangTooling)
-    target_link_libraries(${name} clangToolingCore)
-    target_link_libraries(${name} ${clang_tooling_refactoring_lib})
+      target_link_libraries(${name} clangTooling)
+      target_link_libraries(${name} clangToolingCore)
+      target_link_libraries(${name} ${clang_tooling_refactoring_lib})
   endif()
 
   foreach(llvm_lib ${LLVM_LIBS})
@@ -187,14 +187,54 @@ macro(add_clang_plugin name)
 
 endmacro()
 
+macro(add_clang_plugin_shared name)
+  set(srcs ${ARGN})
+
+  add_library(${name} SHARED ${srcs})
+
+  if(${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.16.0")
+      # 30% speedup
+      target_precompile_headers(${name} PRIVATE src/checkbase.h)
+  endif()
+
+  if(SYMBOL_FILE)
+    set_target_properties(${name} PROPERTIES LINK_FlAGS "-exported_symbols_list ${SYMBOL_FILE}")
+  endif()
+
+  if (LINK_CLAZY_TO_LLVM)
+    link_to_llvm(${name} FALSE)
+  else()
+    target_link_libraries(${name} clangTooling)
+    target_link_libraries(${name} clangToolingCore)
+    target_link_libraries(${name} ${clang_tooling_refactoring_lib})
+  endif()
+
+  if(MSVC)
+    target_link_libraries(${name} ${CLANG_LIBRARY_IMPORT}) # Link against clang.exe to share the plugin registry
+  endif()
+
+endmacro()
+
 set(SYMBOL_FILE Lazy.exports)
 
 if (NOT CLAZY_BUILD_WITH_CLANG)
   set(CLAZY_MINI_AST_DUMPER_SRCS src/MiniAstDumper.cpp)
+  add_clang_plugin_shared(ClazyPlugin_shared ${CLAZY_PLUGIN_SRCS} ${CLAZY_MINI_AST_DUMPER_SRCS})
   add_clang_plugin(ClazyPlugin ${CLAZY_PLUGIN_SRCS} ${CLAZY_MINI_AST_DUMPER_SRCS})
+  set_target_properties(ClazyPlugin_shared PROPERTIES
+    LINKER_LANGUAGE CXX
+    PREFIX ""
+    LIBRARY_OUTPUT_NAME "ClazyPlugin"
+  )
   set_target_properties(ClazyPlugin PROPERTIES
     LINKER_LANGUAGE CXX
     PREFIX ""
+  )
+
+  install(TARGETS ClazyPlugin_shared
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   )
 
   install(TARGETS ClazyPlugin
